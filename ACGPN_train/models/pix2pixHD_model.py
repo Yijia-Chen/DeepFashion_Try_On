@@ -1,5 +1,3 @@
-### Copyright (C) 2017 NVIDIA Corporation. All rights reserved. 
-### Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 import numpy as np
 import torch
 import os
@@ -14,6 +12,8 @@ import torch.nn.functional as F
 import ipdb
 
 NC=20
+I_WIDTH, I_HEIGHT = 256, 192
+
 def generate_discrete_label(inputs, label_nc,onehot=True,encode=True):
     pred_batch = []
     size = inputs.size()
@@ -25,7 +25,7 @@ def generate_discrete_label(inputs, label_nc,onehot=True,encode=True):
     pred_batch = torch.from_numpy(pred_batch)
     label_map = []
     for p in pred_batch:
-        p = p.view(1, 256, 192)
+        p = p.view(1, I_WIDTH, I_HEIGHT)
         label_map.append(p)
     label_map = torch.stack(label_map, 0)
     if not onehot:
@@ -75,9 +75,9 @@ class Pix2PixHDModel(BaseModel):
         )
 
         return loss
-    def ger_average_color(self,mask,arms):
-        color=torch.zeros(arms.shape).cuda()
-        for i in range(arms.shape[0]):
+    def ger_average_color(self,mask,legs):
+        color=torch.zeros(legs.shape).cuda()
+        for i in range(legs.shape[0]):
             count = len(torch.nonzero(mask[i, :, :, :]))
             if count < 10:
                 color[i, 0, :, :]=0
@@ -85,10 +85,11 @@ class Pix2PixHDModel(BaseModel):
                 color[i, 2, :, :]=0
 
             else:
-                color[i,0,:,:]=arms[i,0,:,:].sum()/count
-                color[i,1,:,:]=arms[i,1,:,:].sum()/count
-                color[i,2,:,:]=arms[i,2,:,:].sum()/count
+                color[i,0,:,:]=legs[i,0,:,:].sum()/count
+                color[i,1,:,:]=legs[i,1,:,:].sum()/count
+                color[i,2,:,:]=legs[i,2,:,:].sum()/count
         return color
+
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
         if opt.resize_or_crop != 'none' or not opt.isTrain: # when training at full res this causes OOM
@@ -104,9 +105,9 @@ class Pix2PixHDModel(BaseModel):
         with torch.no_grad():
             pass
         self.Unet=networks.define_UnetMask(4,self.gpu_ids)
-        self.G1 = networks.define_Refine(37,14,self.gpu_ids)
-        self.G2 = networks.define_Refine(19+18,1,self.gpu_ids)
-        self.G = networks.define_Refine(24,3,self.gpu_ids)
+        self.G1 = networks.define_Refine(18+20+3+1+1,20,self.gpu_ids)
+        self.G2 = networks.define_Refine(18+20+3+1+1,1,self.gpu_ids)
+        self.G = networks.define_Refine(20+3+3+3+1,3,self.gpu_ids)
         #ipdb.set_trace()
         self.tanh=nn.Tanh()
         self.sigmoid=nn.Sigmoid()
@@ -117,10 +118,10 @@ class Pix2PixHDModel(BaseModel):
             use_sigmoid = opt.no_lsgan
             netD_input_nc = input_nc + opt.output_nc
             netB_input_nc = opt.output_nc * 2
-            self.D1=self.get_D(34+14+3,opt)
-            self.D2=self.get_D(20+18,opt)
-            self.D=self.get_D(27,opt)
-            self. D3=self.get_D(7,opt)
+            self.D1=self.get_D(34+20+3,opt)
+            self.D2=self.get_D(20+18,opt) # FIXME
+            self.D=self.get_D(27,opt) # TODO
+            self. D3=self.get_D(7,opt) # FIXME
             #self.netB = networks.define_B(netB_input_nc, opt.output_nc, 32, 3, 3, opt.norm, gpu_ids=self.gpu_ids)        
             
         if self.opt.verbose:
@@ -263,8 +264,8 @@ class Pix2PixHDModel(BaseModel):
         #ipdb.set_trace()
         input_label,masked_label,all_clothes_label= self.encode_input(label,clothes_mask,all_clothes_label)
         #ipdb.set_trace()
-        arm1_mask=torch.FloatTensor((label.cpu().numpy()==11).astype(np.float)).cuda()
-        arm2_mask=torch.FloatTensor((label.cpu().numpy()==13).astype(np.float)).cuda()
+        leg1_mask=torch.FloatTensor((label.cpu().numpy()==16).astype(np.float)).cuda()
+        leg2_mask=torch.FloatTensor((label.cpu().numpy()==17).astype(np.float)).cuda()
         pre_clothes_mask=torch.FloatTensor((pre_clothes_mask.detach().cpu().numpy() > 0.5).astype(np.float)).cuda()
         clothes=clothes*pre_clothes_mask
 
@@ -275,20 +276,13 @@ class Pix2PixHDModel(BaseModel):
         # real_image=real_image * clothes_mask+(1-clothes_mask)*-1
         shape=pre_clothes_mask.shape
 
-        print('\n\n##### G1 #####\n')
-        print('pre_clothes_mask:', pre_clothes_mask.shape)
-        print('T_C:', clothes.shape)
-        print('M^F', all_clothes_label.shape)
-        print('M_P', pose.shape)
-        print('noise', self.gen_noise(shape).shape)
         G1_in=torch.cat([pre_clothes_mask,clothes,all_clothes_label,pose,self.gen_noise(shape)],dim=1)
-        arm_label=self.G1.refine(G1_in)
-        arm_label=self.sigmoid(arm_label)
-        CE_loss = self.cross_entropy2d(arm_label, (label * (1 - clothes_mask)).transpose(0, 1)[0].long())*10
-        print('\nsuccess!\n')
+        leg_label=self.G1.refine(G1_in)
+        leg_label=self.sigmoid(leg_label)
+        CE_loss = self.cross_entropy2d(leg_label, (label * (1 - clothes_mask)).transpose(0, 1)[0].long())*10
 
-        armlabel_map=generate_discrete_label(arm_label.detach(),14,False)
-        dis_label=generate_discrete_label(arm_label.detach(),14)
+        leglabel_map=generate_discrete_label(leg_label.detach(),20,False)
+        dis_label=generate_discrete_label(leg_label.detach(),20)
 
         G2_in=torch.cat([pre_clothes_mask,clothes,masked_label,pose,self.gen_noise(shape)],1)
         fake_cl=self.G2.refine(G2_in)
@@ -296,21 +290,21 @@ class Pix2PixHDModel(BaseModel):
         CE_loss += self.BCE(fake_cl, clothes_mask)*10
         
         #ipdb.set_trace()
-        fake_cl_dis=torch.FloatTensor((fake_cl.detach().cpu().numpy()>0.5).astype(np.float)).cuda()
-        new_arm1_mask=torch.FloatTensor((armlabel_map.cpu().numpy()==11).astype(np.float)).cuda()
-        new_arm2_mask=torch.FloatTensor((armlabel_map.cpu().numpy()==13).astype(np.float)).cuda()
-        arm1_occ=clothes_mask*new_arm1_mask
-        arm2_occ=clothes_mask*new_arm2_mask
-        arm1_full=arm1_occ+(1-clothes_mask)*arm1_mask
-        arm2_full=arm2_occ+(1-clothes_mask)*arm2_mask
-        armlabel_map*=(1-new_arm1_mask)
-        armlabel_map*=(1-new_arm2_mask)
-        armlabel_map=armlabel_map*(1-arm1_full)+arm1_full*11
-        armlabel_map=armlabel_map*(1-arm2_full)+arm2_full*13
+        fake_cl_dis=torch.FloatTensor((fake_cl.detach().cpu().numpy()>0.5).astype(np.float)).cuda() # FIXME
+        new_leg1_mask=torch.FloatTensor((leglabel_map.cpu().numpy()==16).astype(np.float)).cuda()
+        new_leg2_mask=torch.FloatTensor((leglabel_map.cpu().numpy()==17).astype(np.float)).cuda()
+        leg1_occ=clothes_mask*new_leg1_mask
+        leg2_occ=clothes_mask*new_leg2_mask
+        leg1_full=leg1_occ+(1-clothes_mask)*leg1_mask
+        leg2_full=leg2_occ+(1-clothes_mask)*leg2_mask
+        leglabel_map*=(1-new_leg1_mask)
+        leglabel_map*=(1-new_leg2_mask)
+        leglabel_map=leglabel_map*(1-leg1_full)+leg1_full*16
+        leglabel_map=leglabel_map*(1-leg2_full)+leg2_full*17
 
 
         ## construct full label map
-        armlabel_map=armlabel_map*(1-fake_cl_dis)+fake_cl_dis*4
+        leglabel_map=leglabel_map*(1-fake_cl_dis)+fake_cl_dis*4
 
 
  
@@ -321,11 +315,11 @@ class Pix2PixHDModel(BaseModel):
         fake_c=self.tanh(fake_c)
         composition_mask=self.sigmoid(composition_mask)
 
-        skin_color=self.ger_average_color((arm1_mask+arm2_mask-arm2_mask*arm1_mask),(arm1_mask+arm2_mask-arm2_mask*arm1_mask)*real_image)
+        skin_color=self.ger_average_color((leg1_mask+leg2_mask-leg2_mask*leg1_mask),(leg1_mask+leg2_mask-leg2_mask*leg1_mask)*real_image)
 
-        img_hole_hand=img_fore*(1-clothes_mask)*(1-arm1_mask)*(1-arm2_mask)+img_fore*arm1_mask*(1-mask)+img_fore*arm2_mask*(1-mask)
+        img_hole_feet=img_fore*(1-clothes_mask)*(1-leg1_mask)*(1-leg2_mask)+img_fore*leg1_mask*(1-mask)+img_fore*leg2_mask*(1-mask)
 
-        G_in=torch.cat([img_hole_hand,masked_label,real_image*clothes_mask,skin_color,self.gen_noise(shape)],1)
+        G_in=torch.cat([img_hole_feet,masked_label,real_image*clothes_mask,skin_color,self.gen_noise(shape)],1)
         fake_image=self.G.refine(G_in.detach())
         fake_image=self.tanh(fake_image)
         ## THE POOL TO SAVE IMAGES\
@@ -334,7 +328,7 @@ class Pix2PixHDModel(BaseModel):
         input_pool=[G1_in,G2_in,G_in,torch.cat([clothes_mask,clothes],1)]        ##fake_cl_dis to replace
         #ipdb.set_trace()
         real_pool=[masked_label,clothes_mask,real_image,real_image*clothes_mask]
-        fake_pool=[arm_label,fake_cl,fake_image,fake_c]
+        fake_pool=[leg_label,fake_cl,fake_image,fake_c]
         D_pool=[self.D1,self.D2,self.D,self.D3]
         pool_lenth=len(fake_pool)
         loss_D_fake=0
@@ -346,7 +340,7 @@ class Pix2PixHDModel(BaseModel):
 
             # Fake Detection and Loss
             pred_fake_pool = self.discriminate(D_pool[iter_p],input_pool[iter_p].detach(), fake_pool[iter_p], use_pool=True)
-            loss_D_fake += self.criterionGAN(pred_fake_pool, False)
+            loss_D_fake += self.criterionGAN(pred_fake_pool, False) # TODO
             # Real Detection and Loss
             pred_real = self.discriminate(D_pool[iter_p],input_pool[iter_p].detach(), real_pool[iter_p])
             loss_D_real += self.criterionGAN(pred_real, True)

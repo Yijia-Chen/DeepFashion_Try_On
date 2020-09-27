@@ -18,6 +18,8 @@ from torch.autograd import Variable
 from tps_grid_gen import TPSGridGen
 import ipdb
 
+I_WIDTH, I_HEIGHT = 256, 192
+
 ###############################################################################
 # Functions
 ###############################################################################
@@ -366,7 +368,7 @@ class AttGenerator(nn.Module):
             # print(i)
             up = self.upsampling[i](up)
             if i == 3:
-                break;
+                break
             up = self.AttNorm[i](input, up)
         return self.last_conv(up)
 
@@ -1632,7 +1634,7 @@ class STNNet(nn.Module):
         }['bounded_stn']
         self.loc_net = GridLocNet(grid_size_h, grid_size_w, target_control_points)
 
-        self.tps = TPSGridGen(256, 192, target_control_points) # TODO: may need to change
+        self.tps = TPSGridGen(I_WIDTH, I_HEIGHT, target_control_points) # TODO: may need to change
 
     def get_row(self, coor, num):
         for j in range(num):
@@ -1674,7 +1676,7 @@ class STNNet(nn.Module):
         source_control_points=(source_control_points)
         # print('control points',source_control_points.shape)
         source_coordinate = self.tps(source_control_points)
-        grid = source_coordinate.view(batch_size, 256, 192, 2)
+        grid = source_coordinate.view(batch_size, I_WIDTH, I_HEIGHT, 2)
         # print('grid size',grid.shape)
         transformed_x = grid_sample(x, grid, canvas=0)
         warped_mask = grid_sample(mask, grid, canvas=0)

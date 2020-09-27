@@ -106,7 +106,7 @@ class AlignedDataset(BaseDataset):
         #     if '000386' in x :
         #         index=k
         #         break
-        test=np.random.randint(1) # TODO: change w.r.t. number of test samples
+        test=np.random.randint(1) # FIXME change w.r.t. number of test samples
         # for k, s in enumerate(self.B_paths):
         #    if '006581' in s:
         #        test = k

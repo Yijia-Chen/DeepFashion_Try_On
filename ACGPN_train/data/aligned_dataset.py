@@ -10,6 +10,7 @@ import numpy as np
 import os.path as osp
 from PIL import ImageDraw
 import ipdb
+# TODO: make all changes that happened in ACGPN_inference
 
 class AlignedDataset(BaseDataset):
     def initialize(self, opt):
@@ -168,7 +169,7 @@ class AlignedDataset(BaseDataset):
             try:
                 pose_data = pose_label['people'][0]['pose_keypoints']
             except IndexError:
-                pose_data = [0 for i in range(54)] # TODO: change to how many?
+                pose_data = [0 for i in range(54)] # FIXME may need change
             pose_data = np.array(pose_data)
             pose_data = pose_data.reshape((-1,3))
 
