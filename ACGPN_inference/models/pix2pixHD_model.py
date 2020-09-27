@@ -145,7 +145,7 @@ class Pix2PixHDModel(BaseModel):
         # Main Generator
         with torch.no_grad():
             self.Unet = networks.define_UnetMask(4, self.gpu_ids).eval()
-            self.G1 = networks.define_Refine(37, 14, self.gpu_ids).eval()
+            self.G1 = networks.define_Refine(18+14+3+1+1, 14, self.gpu_ids).eval()
             self.G2 = networks.define_Refine(19+18, 1, self.gpu_ids).eval()
             self.G = networks.define_Refine(24, 3, self.gpu_ids).eval()
 
@@ -290,12 +290,6 @@ class Pix2PixHDModel(BaseModel):
 
         shape = pre_clothes_mask.shape
 
-        print('\n\n##### G1 #####\n')
-        print('pre_clothes_mask:', pre_clothes_mask.shape)
-        print('T_C:', clothes.shape)
-        print('M^F', all_clothes_label.shape)
-        print('M_P', pose.shape)
-        print('noise', self.gen_noise(shape).shape)
         G1_in = torch.cat([pre_clothes_mask, clothes, all_clothes_label, pose, self.gen_noise(shape)], dim=1)
         arm_label = self.G1.refine(G1_in)
 
@@ -304,6 +298,7 @@ class Pix2PixHDModel(BaseModel):
 
         armlabel_map = generate_discrete_label(arm_label.detach(), 14, False)
         dis_label = generate_discrete_label(arm_label.detach(), 14)
+
         G2_in = torch.cat([pre_clothes_mask, clothes, dis_label,pose,self.gen_noise(shape)], 1)
         fake_cl = self.G2.refine(G2_in)
         fake_cl = self.sigmoid(fake_cl)
@@ -340,9 +335,16 @@ class Pix2PixHDModel(BaseModel):
         occlude = (1 - bigger_arm1_occ * (arm2_mask + arm1_mask+clothes_mask)) * (1 - bigger_arm2_occ * (arm2_mask + arm1_mask+clothes_mask))
         img_hole_hand = img_fore * (1 - clothes_mask) * occlude * (1 - fake_cl_dis)
 
+        print('\n\n##### G #####\n')
+        print('img_hole_hand:', img_hole_hand.shape)
+        print('dis_label:', dis_label.shape)
+        print('fake_c', fake_c.shape)
+        print('skin_color', skin_color.shape)
+        print('gen_noise', self.gen_noise(shape).shape)
         G_in = torch.cat([img_hole_hand, dis_label, fake_c, skin_color, self.gen_noise(shape)], 1)
         fake_image = self.G.refine(G_in.detach())
         fake_image = self.tanh(fake_image)
+        print('\nsuccess!\n')
 
         loss_D_fake = 0
         loss_D_real = 0
