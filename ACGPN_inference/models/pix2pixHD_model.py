@@ -290,6 +290,12 @@ class Pix2PixHDModel(BaseModel):
 
         shape = pre_clothes_mask.shape
 
+        print('\n\n##### G1 #####\n')
+        print('pre_clothes_mask:', pre_clothes_mask.shape)
+        print('T_C:', clothes.shape)
+        print('M^F', all_clothes_label.shape)
+        print('M_P', pose.shape)
+        print('noise', self.gen_noise(shape).shape)
         G1_in = torch.cat([pre_clothes_mask, clothes, all_clothes_label, pose, self.gen_noise(shape)], dim=1)
         arm_label = self.G1.refine(G1_in)
 
