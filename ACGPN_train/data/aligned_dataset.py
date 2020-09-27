@@ -168,7 +168,7 @@ class AlignedDataset(BaseDataset):
             try:
                 pose_data = pose_label['people'][0]['pose_keypoints']
             except IndexError:
-                pose_data = [0 for i in range(54)]
+                pose_data = [0 for i in range(54)] # TODO: change to how many?
             pose_data = np.array(pose_data)
             pose_data = pose_data.reshape((-1,3))
 

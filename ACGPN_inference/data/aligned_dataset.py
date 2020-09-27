@@ -106,7 +106,7 @@ class AlignedDataset(BaseDataset):
         #     if '000386' in x :
         #         index=k
         #         break
-        test=np.random.randint(2032)
+        test=np.random.randint(1) # TODO: change w.r.t. number of test samples
         # for k, s in enumerate(self.B_paths):
         #    if '006581' in s:
         #        test = k
@@ -174,7 +174,7 @@ class AlignedDataset(BaseDataset):
             pose_label = json.load(f)
             pose_data = pose_label['people'][0]['pose_keypoints']
             pose_data = np.array(pose_data)
-            pose_data = pose_data.reshape((-1,3))
+            pose_data = pose_data.reshape((-1,3)) # reshapes pose data to 3 columns
 
         point_num = pose_data.shape[0]
         pose_map = torch.zeros(point_num, self.fine_height, self.fine_width)
