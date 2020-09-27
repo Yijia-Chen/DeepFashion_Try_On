@@ -298,10 +298,6 @@ class Pix2PixHDModel(BaseModel):
 
         armlabel_map = generate_discrete_label(arm_label.detach(), 14, False)
         dis_label = generate_discrete_label(arm_label.detach(), 14) # output of G1
-        print('\nHi\n')
-        print(armlabel_map.shape)
-        print(dis_label.shape)
-        print('\n')
 
         G2_in = torch.cat([pre_clothes_mask, clothes, dis_label,pose,self.gen_noise(shape)], 1)
         fake_cl = self.G2.refine(G2_in)
@@ -331,6 +327,10 @@ class Pix2PixHDModel(BaseModel):
         dis_label=encode(armlabel_map,armlabel_map.shape)
 
         fake_c, warped, warped_mask,warped_grid= self.Unet(clothes, fake_cl_dis, pre_clothes_mask,grid)
+        print('\nfake_c:', fake_c.shape)
+        print('warped', warped.shape)
+        print('warped_mask', warped_mask.shape)
+        print('warped_grid', warped_grid.shape, '\n')
         mask=fake_c[:,3,:,:]
         mask=self.sigmoid(mask)*fake_cl_dis
         fake_c = self.tanh(fake_c[:,0:3,:,:])
