@@ -16,30 +16,32 @@ import datetime
 import ipdb
 
 writer = SummaryWriter('runs/uniform_all')
+I_WIDTH, I_HEIGHT = 256, 192
+
 SIZE=320
 NC=14
 def generate_label_plain(inputs):
     size = inputs.size()
     pred_batch = []
     for input in inputs:
-        input = input.view(1, NC, 256,192)
+        input = input.view(1, NC, I_WIDTH, I_HEIGHT)
         pred = np.squeeze(input.data.max(1)[1].cpu().numpy(), axis=0)
         pred_batch.append(pred)
 
     pred_batch = np.array(pred_batch)
     pred_batch = torch.from_numpy(pred_batch)
-    label_batch = pred_batch.view(size[0], 1, 256,192)
+    label_batch = pred_batch.view(size[0], 1, I_WIDTH, I_HEIGHT)
 
     return label_batch
 def morpho(mask,iter):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     new=[]
     for i in range(len(mask)):
-        tem=mask[i].squeeze().reshape(256,192,1)*255
+        tem=mask[i].squeeze().reshape(I_WIDTH, I_HEIGHT,1)*255
         tem=tem.astype(np.uint8)
         tem=cv2.dilate(tem,kernel,iterations=iter)
         tem=tem.astype(np.float64)
-        tem=tem.reshape(1,256,192)
+        tem=tem.reshape(1,I_WIDTH, I_HEIGHT)
         new.append(tem.astype(np.float64)/255.0)
     new=np.stack(new)
     return new
@@ -73,11 +75,11 @@ def compose(label,mask,color_mask,edge,color,noise):
 
 def changearm(old_label):
     label=old_label
-    arm1=torch.FloatTensor((data['label'].cpu().numpy()==11).astype(np.int))
-    arm2=torch.FloatTensor((data['label'].cpu().numpy()==13).astype(np.int))
+    leg1=torch.FloatTensor((data['label'].cpu().numpy()==16).astype(np.int))
+    leg2=torch.FloatTensor((data['label'].cpu().numpy()==17).astype(np.int))
     noise=torch.FloatTensor((data['label'].cpu().numpy()==7).astype(np.int))
-    label=label*(1-arm1)+arm1*4
-    label=label*(1-arm2)+arm2*4
+    label=label*(1-leg1)+leg1*4
+    label=label*(1-leg2)+leg2*4
     label=label*(1-noise)+noise*4
     return label
 
@@ -138,7 +140,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         mask_fore=torch.FloatTensor((data['label'].cpu().numpy()>0).astype(np.int))
         img_fore=data['image']*mask_fore
         img_fore_wc=img_fore*mask_fore
-        all_clothes_label=changearm(data['label'])
+        all_clothes_label=changeleg(data['label'])
         ############## Forward Pass ######################
         losses, fake_image, real_image,input_label,L1_loss,style_loss,clothes_mask,warped,refined,CE_loss,rx,ry,cx,cy,rg,cg= model(Variable(data['label'].cuda()),Variable(data['edge'].cuda()),Variable(img_fore.cuda()),Variable(mask_clothes.cuda()),Variable(data['color'].cuda()),Variable(all_clothes_label.cuda()),Variable(data['image'].cuda()),Variable(data['pose'].cuda()),Variable(data['mask'].cuda())  )
 
